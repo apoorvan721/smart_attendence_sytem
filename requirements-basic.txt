@@ -1,0 +1,9 @@
+# Basic requirements WITHOUT face recognition
+flask>=2.0.0
+flask-cors>=3.0.0
+requests>=2.25.0
+numpy
+Pillow
+
+# Optional: Only install if you don't need camera features
+# opencv-python

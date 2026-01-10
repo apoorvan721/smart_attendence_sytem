@@ -1,0 +1,17 @@
+{
+  "face_recognition": {
+    "confidence_threshold": 0.6,
+    "camera_index": 0,
+    "frame_resize_factor": 0.25,
+    "recognition_interval": 0.1
+  },
+  "attendance": {
+    "auto_mark_present": true,
+    "prevent_duplicate_marking": true,
+    "mark_late_threshold_minutes": 15
+  },
+  "server": {
+    "node_server_url": "http://localhost:5000",
+    "python_server_port": 5001
+  }
+}

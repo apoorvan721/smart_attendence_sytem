@@ -1,0 +1,461 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Face Recognition Attendance</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            padding: 20px;
+        }
+
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+            background: white;
+            border-radius: 15px;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.2);
+            overflow: hidden;
+        }
+
+        .header {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            padding: 2rem;
+            text-align: center;
+        }
+
+        .header h1 {
+            font-size: 2.5rem;
+            margin-bottom: 0.5rem;
+        }
+
+        .header p {
+            font-size: 1.1rem;
+            opacity: 0.9;
+        }
+
+        .content {
+            padding: 2rem;
+        }
+
+        .controls {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+            gap: 1.5rem;
+            margin-bottom: 2rem;
+        }
+
+        .form-group {
+            display: flex;
+            flex-direction: column;
+        }
+
+        .form-label {
+            font-weight: 600;
+            margin-bottom: 0.5rem;
+            color: #333;
+        }
+
+        .form-select {
+            padding: 0.75rem;
+            border: 2px solid #e1e5e9;
+            border-radius: 8px;
+            font-size: 1rem;
+            transition: border-color 0.3s;
+        }
+
+        .form-select:focus {
+            outline: none;
+            border-color: #667eea;
+        }
+
+        .btn {
+            padding: 0.75rem 2rem;
+            border: none;
+            border-radius: 8px;
+            font-size: 1rem;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.3s;
+            margin: 0.25rem;
+        }
+
+        .btn-primary {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+        }
+
+        .btn-primary:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 4px 15px rgba(102, 126, 234, 0.4);
+        }
+
+        .btn-danger {
+            background: #f44336;
+            color: white;
+        }
+
+        .btn-danger:hover {
+            background: #d32f2f;
+            transform: translateY(-2px);
+        }
+
+        .btn:disabled {
+            opacity: 0.6;
+            cursor: not-allowed;
+            transform: none !important;
+        }
+
+        .video-section {
+            display: grid;
+            grid-template-columns: 2fr 1fr;
+            gap: 2rem;
+            margin-top: 2rem;
+        }
+
+        .video-container {
+            background: #f8f9fa;
+            border-radius: 15px;
+            padding: 1rem;
+            text-align: center;
+        }
+
+        .video-feed {
+            width: 100%;
+            max-width: 640px;
+            height: auto;
+            border-radius: 10px;
+            box-shadow: 0 4px 20px rgba(0,0,0,0.1);
+        }
+
+        .status-panel {
+            background: #f8f9fa;
+            border-radius: 15px;
+            padding: 1.5rem;
+        }
+
+        .status-item {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 0.75rem 0;
+            border-bottom: 1px solid #e1e5e9;
+        }
+
+        .status-item:last-child {
+            border-bottom: none;
+        }
+
+        .status-label {
+            font-weight: 600;
+            color: #333;
+        }
+
+        .status-value {
+            font-weight: bold;
+        }
+
+        .status-running {
+            color: #4caf50;
+        }
+
+        .status-stopped {
+            color: #f44336;
+        }
+
+        .instructions {
+            background: #e3f2fd;
+            border-left: 4px solid #2196f3;
+            padding: 1.5rem;
+            margin: 2rem 0;
+            border-radius: 0 8px 8px 0;
+        }
+
+        .instructions h3 {
+            color: #1976d2;
+            margin-bottom: 1rem;
+        }
+
+        .instructions ol {
+            margin-left: 1.5rem;
+        }
+
+        .instructions li {
+            margin-bottom: 0.5rem;
+            color: #333;
+        }
+
+        .alert {
+            padding: 1rem;
+            border-radius: 8px;
+            margin: 1rem 0;
+        }
+
+        .alert-success {
+            background: #d4edda;
+            color: #155724;
+            border: 1px solid #c3e6cb;
+        }
+
+        .alert-error {
+            background: #f8d7da;
+            color: #721c24;
+            border: 1px solid #f5c6cb;
+        }
+
+        @media (max-width: 768px) {
+            .video-section {
+                grid-template-columns: 1fr;
+            }
+            
+            .controls {
+                grid-template-columns: 1fr;
+            }
+            
+            .header h1 {
+                font-size: 2rem;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>🎥 Face Recognition Attendance</h1>
+            <p>Automatic attendance marking using facial recognition technology</p>
+        </div>
+
+        <div class="content">
+            <div class="instructions">
+                <h3>📋 Setup Instructions</h3>
+                <ol>
+                    <li>Create a <strong>'faces'</strong> directory in the project root</li>
+                    <li>Add student photos with format: <strong>StudentName_StudentID.jpg</strong></li>
+                    <li>Example: <code>John-Doe_1.jpg</code>, <code>Jane-Smith_2.jpg</code></li>
+                    <li>Select class and subject below</li>
+                    <li>Click "Start Recognition" to begin automatic attendance</li>
+                </ol>
+            </div>
+
+            <div class="controls">
+                <div class="form-group">
+                    <label class="form-label">Select Class</label>
+                    <select id="classSelect" class="form-select">
+                        <option value="">Choose a class...</option>
+                    </select>
+                </div>
+
+                <div class="form-group">
+                    <label class="form-label">Select Subject</label>
+                    <select id="subjectSelect" class="form-select">
+                        <option value="">Choose a subject...</option>
+                    </select>
+                </div>
+
+                <div class="form-group">
+                    <label class="form-label">Controls</label>
+                    <div>
+                        <button id="startBtn" class="btn btn-primary" onclick="startRecognition()">
+                            🎥 Start Recognition
+                        </button>
+                        <button id="stopBtn" class="btn btn-danger" onclick="stopRecognition()" disabled>
+                            ⏹️ Stop Recognition
+                        </button>
+                    </div>
+                </div>
+            </div>
+
+            <div id="alertContainer"></div>
+
+            <div class="video-section">
+                <div class="video-container">
+                    <h3>📹 Live Camera Feed</h3>
+                    <img id="videoFeed" class="video-feed" src="/static/placeholder.jpg" alt="Camera feed will appear here">
+                </div>
+
+                <div class="status-panel">
+                    <h3>📊 Status</h3>
+                    <div class="status-item">
+                        <span class="status-label">Recognition Status:</span>
+                        <span id="recognitionStatus" class="status-value status-stopped">Stopped</span>
+                    </div>
+                    <div class="status-item">
+                        <span class="status-label">Known Faces:</span>
+                        <span id="knownFaces" class="status-value">0</span>
+                    </div>
+                    <div class="status-item">
+                        <span class="status-label">Current Class:</span>
+                        <span id="currentClass" class="status-value">None</span>
+                    </div>
+                    <div class="status-item">
+                        <span class="status-label">Current Subject:</span>
+                        <span id="currentSubject" class="status-value">None</span>
+                    </div>
+                    <div class="status-item">
+                        <span class="status-label">Today's Attendance:</span>
+                        <span id="todayAttendance" class="status-value">0</span>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        let isRecognitionRunning = false;
+
+        // Load classes and subjects on page load
+        window.onload = function() {
+            loadClasses();
+            loadSubjects();
+            updateStatus();
+            setInterval(updateStatus, 2000); // Update status every 2 seconds
+        };
+
+        async function loadClasses() {
+            try {
+                const response = await fetch('/get_classes');
+                const classes = await response.json();
+                const select = document.getElementById('classSelect');
+                
+                classes.forEach(cls => {
+                    const option = document.createElement('option');
+                    option.value = cls.id;
+                    option.textContent = cls.name;
+                    select.appendChild(option);
+                });
+            } catch (error) {
+                console.error('Error loading classes:', error);
+            }
+        }
+
+        async function loadSubjects() {
+            try {
+                const response = await fetch('/get_subjects');
+                const subjects = await response.json();
+                const select = document.getElementById('subjectSelect');
+                
+                subjects.forEach(subject => {
+                    const option = document.createElement('option');
+                    option.value = subject.id;
+                    option.textContent = subject.name;
+                    select.appendChild(option);
+                });
+            } catch (error) {
+                console.error('Error loading subjects:', error);
+            }
+        }
+
+        async function startRecognition() {
+            const classId = document.getElementById('classSelect').value;
+            const subjectId = document.getElementById('subjectSelect').value;
+
+            if (!classId || !subjectId) {
+                showAlert('Please select both class and subject before starting recognition.', 'error');
+                return;
+            }
+
+            try {
+                const response = await fetch('/start_recognition', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({
+                        classId: parseInt(classId),
+                        subjectId: parseInt(subjectId)
+                    })
+                });
+
+                const result = await response.json();
+                
+                if (result.status === 'success') {
+                    isRecognitionRunning = true;
+                    document.getElementById('startBtn').disabled = true;
+                    document.getElementById('stopBtn').disabled = false;
+                    document.getElementById('videoFeed').src = '/video_feed';
+                    showAlert('Face recognition started successfully!', 'success');
+                } else {
+                    showAlert('Failed to start face recognition: ' + result.message, 'error');
+                }
+            } catch (error) {
+                showAlert('Error starting recognition: ' + error.message, 'error');
+            }
+        }
+
+        async function stopRecognition() {
+            try {
+                const response = await fetch('/stop_recognition', {
+                    method: 'POST'
+                });
+
+                const result = await response.json();
+                
+                if (result.status === 'success') {
+                    isRecognitionRunning = false;
+                    document.getElementById('startBtn').disabled = false;
+                    document.getElementById('stopBtn').disabled = true;
+                    document.getElementById('videoFeed').src = '/static/placeholder.jpg';
+                    showAlert('Face recognition stopped.', 'success');
+                } else {
+                    showAlert('Failed to stop face recognition: ' + result.message, 'error');
+                }
+            } catch (error) {
+                showAlert('Error stopping recognition: ' + error.message, 'error');
+            }
+        }
+
+        async function updateStatus() {
+            try {
+                const response = await fetch('/attendance_status');
+                const status = await response.json();
+
+                document.getElementById('recognitionStatus').textContent = status.is_running ? 'Running' : 'Stopped';
+                document.getElementById('recognitionStatus').className = 'status-value ' + (status.is_running ? 'status-running' : 'status-stopped');
+                document.getElementById('knownFaces').textContent = status.known_faces;
+                document.getElementById('currentClass').textContent = status.current_class || 'None';
+                document.getElementById('currentSubject').textContent = status.current_subject || 'None';
+                document.getElementById('todayAttendance').textContent = status.today_attendance;
+
+                // Update button states
+                if (status.is_running !== isRecognitionRunning) {
+                    isRecognitionRunning = status.is_running;
+                    document.getElementById('startBtn').disabled = status.is_running;
+                    document.getElementById('stopBtn').disabled = !status.is_running;
+                    
+                    if (status.is_running) {
+                        document.getElementById('videoFeed').src = '/video_feed';
+                    } else {
+                        document.getElementById('videoFeed').src = '/static/placeholder.jpg';
+                    }
+                }
+            } catch (error) {
+                console.error('Error updating status:', error);
+            }
+        }
+
+        function showAlert(message, type) {
+            const container = document.getElementById('alertContainer');
+            const alert = document.createElement('div');
+            alert.className = `alert alert-${type}`;
+            alert.textContent = message;
+            
+            container.innerHTML = '';
+            container.appendChild(alert);
+            
+            setTimeout(() => {
+                alert.remove();
+            }, 5000);
+        }
+    </script>
+</body>
+</html>

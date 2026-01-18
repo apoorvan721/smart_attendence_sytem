@@ -10,15 +10,15 @@ async function updateFacesInDB() {
   const facesDir = './faces';
   const files = fs.readdirSync(facesDir);
   
-  // Extract names from face image files (format: Name_ID.jpg)
+  // Extract names from face image files (format: Name_MCAXXX.jpg)
   const faceData = files
     .filter(file => file.endsWith('.jpg') || file.endsWith('.png'))
     .map(file => {
-      const match = file.match(/^(.+?)_(\d+)\./);
+      const match = file.match(/^(.+?)_(MCA\d+)\./);
       if (match) {
         return {
           name: match[1],
-          id: match[2],
+          rollNumber: match[2],
           filename: file
         };
       }
@@ -34,23 +34,22 @@ async function updateFacesInDB() {
 
   // Add new students based on face images
   for (const face of faceData) {
-    const rollNumber = `ST${face.id.padStart(3, '0')}`;
-    const existing = existingStudents.find(s => s.roll_number === rollNumber);
+    const existing = existingStudents.find(s => s.roll_number === face.rollNumber);
     
     if (!existing) {
-      console.log(`\nAdding new student: ${face.name} (${rollNumber})`);
+      console.log(`\nAdding new student: ${face.name} (${face.rollNumber})`);
       await db.run(
         'INSERT INTO students (name, roll_number, class_id) VALUES (?, ?, ?)',
-        [face.name, rollNumber, 1] // Default to class_id 1
+        [face.name, face.rollNumber, 1] // Default to class_id 1 (MCA)
       );
     } else {
-      console.log(`\nStudent ${face.name} (${rollNumber}) already exists`);
+      console.log(`\nStudent ${face.name} (${face.rollNumber}) already exists`);
       // Update name if different
       if (existing.name !== face.name) {
         console.log(`  Updating name from "${existing.name}" to "${face.name}"`);
         await db.run(
           'UPDATE students SET name = ? WHERE roll_number = ?',
-          [face.name, rollNumber]
+          [face.name, face.rollNumber]
         );
       }
     }

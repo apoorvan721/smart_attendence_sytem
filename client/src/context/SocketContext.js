@@ -17,10 +17,10 @@ export const SocketProvider = ({ children }) => {
   const [liveData, setLiveData] = useState(null);
 
   useEffect(() => {
-    const newSocket = io('http://localhost:5000');
+    const newSocket = io('http://localhost:3001');
     
     newSocket.on('connect', () => {
-      console.log('Connected to server');
+      console.log('Connected to server on port 3001');
       setIsConnected(true);
       newSocket.emit('join-dashboard');
     });

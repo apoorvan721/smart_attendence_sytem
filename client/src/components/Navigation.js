@@ -1,7 +1,7 @@
 import React from 'react';
 import { Link, useLocation } from 'react-router-dom';
 
-const Navigation = () => {
+const Navigation = ({ user, onLogout }) => {
   const location = useLocation();
 
   return (
@@ -21,28 +21,30 @@ const Navigation = () => {
           </li>
           <li>
             <Link 
-              to="/mark-attendance" 
-              className={location.pathname === '/mark-attendance' ? 'active' : ''}
-            >
-              Mark Attendance
-            </Link>
-          </li>
-          <li>
-            <Link 
-              to="/face-recognition" 
-              className={location.pathname === '/face-recognition' ? 'active' : ''}
-            >
-              Face Recognition
-            </Link>
-          </li>
-          <li>
-            <Link 
               to="/reports" 
               className={location.pathname === '/reports' ? 'active' : ''}
             >
               Reports
             </Link>
           </li>
+          {user && (
+            <li>
+              <button 
+                onClick={onLogout}
+                style={{
+                  background: '#f44336',
+                  color: 'white',
+                  border: 'none',
+                  padding: '0.5rem 1rem',
+                  borderRadius: '4px',
+                  cursor: 'pointer',
+                  fontWeight: '600'
+                }}
+              >
+                Logout ({user.name})
+              </button>
+            </li>
+          )}
         </ul>
       </div>
     </nav>

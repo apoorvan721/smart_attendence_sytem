@@ -9,6 +9,9 @@ ChartJS.register(ArcElement, Tooltip, Legend, CategoryScale, LinearScale, BarEle
 const Dashboard = () => {
   const { isConnected, liveData, setLiveData } = useSocket();
   const [loading, setLoading] = useState(true);
+  const backendUrl = process.env.NODE_ENV === 'development' 
+    ? 'http://localhost:3001' 
+    : '';
 
   useEffect(() => {
     fetchLiveData();
@@ -20,9 +23,18 @@ const Dashboard = () => {
     }
   }, [liveData]);
 
+  useEffect(() => {
+    // Fetch live data every 2 seconds for real-time polling
+    const interval = setInterval(() => {
+      fetchLiveData();
+    }, 2000);
+
+    return () => clearInterval(interval);
+  }, []);
+
   const fetchLiveData = async () => {
     try {
-      const response = await axios.get('/api/attendance/live');
+      const response = await axios.get(`${backendUrl}/api/attendance/live`);
       setLiveData(response.data);
       setLoading(false);
     } catch (error) {
@@ -107,26 +119,6 @@ const Dashboard = () => {
             Last updated: {new Date(liveData.lastUpdated).toLocaleTimeString()}
           </p>
         )}
-      </div>
-
-      {/* Overall Statistics */}
-      <div className="stats-overview">
-        <div className="stat-card present">
-          <div className="stat-number">{overall.present}</div>
-          <div className="stat-label">Present</div>
-        </div>
-        <div className="stat-card absent">
-          <div className="stat-number">{overall.absent}</div>
-          <div className="stat-label">Absent</div>
-        </div>
-        <div className="stat-card late">
-          <div className="stat-number">{overall.late}</div>
-          <div className="stat-label">Late</div>
-        </div>
-        <div className="stat-card total">
-          <div className="stat-number">{overall.total}</div>
-          <div className="stat-label">Total</div>
-        </div>
       </div>
 
       {/* Charts */}

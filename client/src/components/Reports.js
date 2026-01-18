@@ -18,15 +18,34 @@ const Reports = () => {
   const [reportData, setReportData] = useState(null);
   const [trendData, setTrendData] = useState(null);
   const [loading, setLoading] = useState(false);
+  const [message, setMessage] = useState('');
+
+  const backendUrl = process.env.NODE_ENV === 'development' 
+    ? 'http://localhost:3001' 
+    : '';
 
   useEffect(() => {
     fetchClasses();
     fetchSubjects();
+    fetchLatestDate();
   }, []);
+
+  const fetchLatestDate = async () => {
+    try {
+      const response = await axios.get('/api/attendance/latest-date');
+      const latestDate = response.data.date;
+      setDateRange(prev => ({
+        start: moment(latestDate).subtract(7, 'days').format('YYYY-MM-DD'),
+        end: latestDate
+      }));
+    } catch (error) {
+      console.error('Error fetching latest date:', error);
+    }
+  };
 
   const fetchClasses = async () => {
     try {
-      const response = await axios.get('/api/classes');
+      const response = await axios.get(`${backendUrl}/api/classes`);
       setClasses(response.data);
     } catch (error) {
       console.error('Error fetching classes:', error);
@@ -35,7 +54,7 @@ const Reports = () => {
 
   const fetchSubjects = async () => {
     try {
-      const response = await axios.get('/api/subjects');
+      const response = await axios.get(`${backendUrl}/api/subjects`);
       setSubjects(response.data);
     } catch (error) {
       console.error('Error fetching subjects:', error);
@@ -44,25 +63,80 @@ const Reports = () => {
 
   const generateReport = async () => {
     setLoading(true);
+    setMessage('');
     try {
       const params = new URLSearchParams();
       if (selectedClass) params.append('classId', selectedClass);
       if (selectedSubject) params.append('subjectId', selectedSubject);
       params.append('date', dateRange.end);
 
-      const response = await axios.get(`/api/attendance/stats?${params}`);
+      console.log('📊 Generating report with params:', Object.fromEntries(params));
+      const response = await axios.get(`${backendUrl}/api/attendance/stats?${params}`);
       setReportData(response.data);
+      setMessage('✅ Report generated successfully');
 
       // Generate trend data for the selected period
       if (selectedClass) {
         const days = moment(dateRange.end).diff(moment(dateRange.start), 'days') + 1;
-        const trendResponse = await axios.get(`/api/attendance/trends?classId=${selectedClass}&days=${days}`);
+        console.log('📈 Fetching trends for', days, 'days');
+        const trendResponse = await axios.get(`${backendUrl}/api/attendance/trends?classId=${selectedClass}&days=${days}`);
         setTrendData(trendResponse.data);
       }
     } catch (error) {
       console.error('Error generating report:', error);
+      setMessage(`❌ Error: ${error.response?.data?.error || error.message}`);
     } finally {
       setLoading(false);
+    }
+  };
+
+  const exportToExcel = async () => {
+    try {
+      const params = new URLSearchParams();
+      if (selectedClass) params.append('classId', selectedClass);
+      if (selectedSubject) params.append('subjectId', selectedSubject);
+      params.append('date', dateRange.end);
+
+      const response = await axios.get(`${backendUrl}/api/attendance/daily-export?${params}`);
+      const { records, date } = response.data;
+
+      if (records.length === 0) {
+        alert('No attendance records found for the selected date');
+        return;
+      }
+
+      // Create CSV content with headers
+      const headers = ['Roll Number', 'Student Name', 'Class', 'Subject', 'Status', 'Marked At'];
+      const csvContent = [
+        headers,
+        ...records.map(record => [
+          record.roll_number,
+          record.student_name,
+          record.class_name,
+          record.subject_name,
+          record.status.toUpperCase(),
+          moment(record.marked_at).format('YYYY-MM-DD HH:mm:ss')
+        ])
+      ];
+
+      // Convert to CSV string
+      const csvString = csvContent.map(row => 
+        row.map(cell => `"${cell}"`).join(',')
+      ).join('\n');
+
+      // Create blob and download
+      const blob = new Blob([csvString], { type: 'text/csv;charset=utf-8;' });
+      const link = document.createElement('a');
+      const url = URL.createObjectURL(blob);
+      link.setAttribute('href', url);
+      link.setAttribute('download', `attendance-${date}.csv`);
+      link.style.visibility = 'hidden';
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+    } catch (error) {
+      console.error('Error exporting to Excel:', error);
+      alert('Failed to export attendance data');
     }
   };
 
@@ -141,6 +215,19 @@ const Reports = () => {
         </p>
       </div>
 
+      {message && (
+        <div style={{
+          backgroundColor: message.includes('✅') ? '#e8f5e9' : '#ffebee',
+          color: message.includes('✅') ? '#2e7d32' : '#c62828',
+          padding: '12px',
+          borderRadius: '4px',
+          marginBottom: '20px',
+          fontWeight: 'bold'
+        }}>
+          {message}
+        </div>
+      )}
+
       {/* Report Filters */}
       <div className="form-section">
         <h3 style={{ marginBottom: '1.5rem' }}>Report Filters</h3>
@@ -207,10 +294,18 @@ const Reports = () => {
           >
             {loading ? 'Generating...' : 'Generate Report'}
           </button>
+          <button 
+            className="btn btn-success"
+            onClick={exportToExcel}
+            style={{ marginLeft: '0.5rem', background: '#4caf50' }}
+          >
+            📊 Download Daily Data (Excel)
+          </button>
           {reportData && (
             <button 
               className="btn btn-success"
               onClick={exportReport}
+              style={{ marginLeft: '0.5rem' }}
             >
               Export CSV
             </button>
@@ -221,25 +316,6 @@ const Reports = () => {
       {/* Report Results */}
       {reportData && (
         <>
-          <div className="stats-overview">
-            <div className="stat-card present">
-              <div className="stat-number">{reportData.present}</div>
-              <div className="stat-label">Present</div>
-            </div>
-            <div className="stat-card absent">
-              <div className="stat-number">{reportData.absent}</div>
-              <div className="stat-label">Absent</div>
-            </div>
-            <div className="stat-card late">
-              <div className="stat-number">{reportData.late}</div>
-              <div className="stat-label">Late</div>
-            </div>
-            <div className="stat-card total">
-              <div className="stat-number">{reportData.total}</div>
-              <div className="stat-label">Total Records</div>
-            </div>
-          </div>
-
           {/* Attendance Rate */}
           <div className="form-section">
             <h3 style={{ textAlign: 'center', marginBottom: '1rem' }}>Attendance Analysis</h3>

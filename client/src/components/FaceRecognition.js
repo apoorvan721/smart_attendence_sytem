@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import axios from 'axios';
+import FaceDetectionNotification from './FaceDetectionNotification';
 
 const FaceRecognition = () => {
   const [classes, setClasses] = useState([]);
@@ -15,9 +16,17 @@ const FaceRecognition = () => {
   });
   const [message, setMessage] = useState('');
   const [loading, setLoading] = useState(false);
+  const [dataLoading, setDataLoading] = useState(true);
+  const [detectedFaces, setDetectedFaces] = useState([]);
+  const [lowConfidenceFaces, setLowConfidenceFaces] = useState([]);
 
   // Python server URL
   const pythonServerUrl = 'http://localhost:5001';
+  
+  // Node backend URL
+  const backendUrl = process.env.NODE_ENV === 'development' 
+    ? 'http://localhost:3001' 
+    : '';
 
   useEffect(() => {
     fetchClasses();
@@ -29,19 +38,89 @@ const FaceRecognition = () => {
     return () => clearInterval(interval);
   }, []);
 
+  useEffect(() => {
+    if (!isRunning) {
+      console.log('Detection effect: recognition not running');
+      return;
+    }
+
+    let previousCount = 0;
+    let previousUnknownCount = 0;
+
+    // Fetch detected faces and update UI
+    const detectionInterval = setInterval(() => {
+      try {
+        axios.get(`${pythonServerUrl}/attendance_status`)
+          .then(response => {
+            const records = response.data.attendance_records || {};
+            const unknownFaces = response.data.unknown_faces || {};
+            const today = new Date().toISOString().split('T')[0];
+            
+            console.log('📊 Status check:', {
+              records: Object.keys(records),
+              unknown: Object.keys(unknownFaces),
+              today
+            });
+            
+            // Get recognized faces detected today
+            const newFaces = Object.keys(records)
+              .filter(key => key.includes(today))
+              .map(key => {
+                const studentId = key.split('_')[0];
+                return studentId;
+              });
+
+            // Get unknown/low-confidence faces
+            const unknownKeys = Object.keys(unknownFaces)
+              .filter(key => key.includes(today));
+
+            // If new students detected, trigger notification
+            if (newFaces.length > previousCount) {
+              console.log('🎓 New face detected! Total:', newFaces.length, 'Previous:', previousCount);
+              console.log('Setting detected faces to:', newFaces);
+              setDetectedFaces([...newFaces]);
+              previousCount = newFaces.length;
+            }
+
+            // If new unknown faces detected, trigger warning
+            if (unknownKeys.length > previousUnknownCount) {
+              console.log('⚠️ Unknown face detected! Total:', unknownKeys.length);
+              const unknownData = unknownKeys.map(key => ({
+                id: key,
+                data: unknownFaces[key]
+              }));
+              setLowConfidenceFaces(unknownData);
+              previousUnknownCount = unknownKeys.length;
+            }
+          })
+          .catch(err => {
+            console.error('Error fetching face detection status:', err);
+          });
+      } catch (error) {
+        console.error('Detection interval error:', error);
+      }
+    }, 1000); // Check every 1 second
+
+    return () => clearInterval(detectionInterval);
+  }, [isRunning, pythonServerUrl]);
+
   const fetchClasses = async () => {
     try {
-      const response = await axios.get('/api/classes');
-      setClasses(response.data);
+      const response = await axios.get(`${backendUrl}/api/classes`);
+      console.log('Classes fetched:', response.data);
+      setClasses(response.data || []);
+      setDataLoading(false);
     } catch (error) {
       console.error('Error fetching classes:', error);
+      setDataLoading(false);
     }
   };
 
   const fetchSubjects = async () => {
     try {
-      const response = await axios.get('/api/subjects');
-      setSubjects(response.data);
+      const response = await axios.get(`${backendUrl}/api/subjects`);
+      console.log('Subjects fetched:', response.data);
+      setSubjects(response.data || []);
     } catch (error) {
       console.error('Error fetching subjects:', error);
     }
@@ -66,6 +145,7 @@ const FaceRecognition = () => {
 
     setLoading(true);
     setMessage('');
+    setDetectedFaces([]); // Reset detected faces
 
     try {
       const response = await axios.post(`${pythonServerUrl}/start_recognition`, {
@@ -75,12 +155,14 @@ const FaceRecognition = () => {
 
       if (response.data.status === 'success') {
         setIsRunning(true);
+        console.log('🎬 Face recognition started - listening for detections...');
         setMessage('Face recognition started successfully! Students will be automatically marked present when detected.');
       } else {
         setMessage(`Failed to start face recognition: ${response.data.message}`);
       }
     } catch (error) {
       setMessage('Error: Make sure the Python face recognition server is running on port 5001.');
+      console.error('Start recognition error:', error);
     } finally {
       setLoading(false);
     }
@@ -100,6 +182,7 @@ const FaceRecognition = () => {
       }
     } catch (error) {
       setMessage('Error stopping recognition.');
+      console.error('Stop recognition error:', error);
     } finally {
       setLoading(false);
     }
@@ -111,6 +194,43 @@ const FaceRecognition = () => {
 
   return (
     <div className="face-recognition">
+      <FaceDetectionNotification faces={detectedFaces} />
+      {/* Low Confidence Notification */}
+      {lowConfidenceFaces.length > 0 && (
+        <div style={{
+          position: 'fixed',
+          top: '20px',
+          left: '20px',
+          zIndex: 9998,
+          maxWidth: '300px',
+          backgroundColor: '#fff3cd',
+          color: '#856404',
+          padding: '1rem',
+          borderRadius: '8px',
+          border: '2px solid #ffc107',
+          boxShadow: '0 4px 12px rgba(0, 0, 0, 0.15)',
+          animation: 'slideInWarning 0.5s ease-out'
+        }}>
+          <strong>⚠️ Unknown Face Detected!</strong>
+          <div style={{ fontSize: '0.9rem', marginTop: '0.5rem' }}>
+            Low confidence face detected. Confidence: {lowConfidenceFaces[0]?.data?.confidence 
+              ? (lowConfidenceFaces[0].data.confidence * 100).toFixed(1) 
+              : 'N/A'}%
+          </div>
+          <style>{`
+            @keyframes slideInWarning {
+              from {
+                transform: translateX(-400px);
+                opacity: 0;
+              }
+              to {
+                transform: translateX(0);
+                opacity: 1;
+              }
+            }
+          `}</style>
+        </div>
+      )}
       <div className="dashboard-header">
         <h1 className="dashboard-title">🎥 Face Recognition Attendance</h1>
         <p className="dashboard-subtitle">
@@ -152,16 +272,34 @@ const FaceRecognition = () => {
       <div className="form-section">
         <h3 style={{ marginBottom: '1.5rem' }}>🎛️ Recognition Controls</h3>
         
+        {dataLoading && (
+          <div style={{ 
+            textAlign: 'center', 
+            padding: '1rem',
+            backgroundColor: '#fff3e0',
+            borderRadius: '8px',
+            marginBottom: '1rem'
+          }}>
+            Loading classes and subjects...
+          </div>
+        )}
+        
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '1rem', marginBottom: '2rem' }}>
           <div className="form-group">
             <label className="form-label">Select Class</label>
             <select 
               className="form-select"
               value={selectedClass}
-              onChange={(e) => setSelectedClass(e.target.value)}
-              disabled={isRunning}
+              onChange={(e) => {
+                const value = e.target.value;
+                setSelectedClass(value);
+                console.log('Selected class:', value, 'Classes available:', classes);
+              }}
+              disabled={isRunning || classes.length === 0}
             >
-              <option value="">Choose a class...</option>
+              <option value="">
+                {classes.length === 0 ? 'No classes available' : 'Choose a class...'}
+              </option>
               {classes.map(cls => (
                 <option key={cls.id} value={cls.id}>
                   {cls.name}
@@ -175,10 +313,16 @@ const FaceRecognition = () => {
             <select 
               className="form-select"
               value={selectedSubject}
-              onChange={(e) => setSelectedSubject(e.target.value)}
-              disabled={isRunning}
+              onChange={(e) => {
+                const value = e.target.value;
+                setSelectedSubject(value);
+                console.log('Selected subject:', value, 'Subjects available:', subjects);
+              }}
+              disabled={isRunning || subjects.length === 0}
             >
-              <option value="">Choose a subject...</option>
+              <option value="">
+                {subjects.length === 0 ? 'No subjects available' : 'Choose a subject...'}
+              </option>
               {subjects.map(subject => (
                 <option key={subject.id} value={subject.id}>
                   {subject.name}
@@ -224,6 +368,40 @@ const FaceRecognition = () => {
             borderRadius: '8px'
           }}>
             {message}
+          </div>
+        )}
+
+        {/* Face Detection Notifications */}
+        {isRunning && detectedFaces.length > 0 && (
+          <div style={{
+            marginTop: '1rem',
+            padding: '1rem',
+            backgroundColor: '#e8f5e9',
+            border: '2px solid #4caf50',
+            borderRadius: '8px'
+          }}>
+            <h4 style={{ color: '#2e7d32', marginBottom: '0.5rem' }}>✅ Recently Detected Students</h4>
+            <div style={{
+              display: 'flex',
+              flexWrap: 'wrap',
+              gap: '0.5rem'
+            }}>
+              {detectedFaces.map((face, index) => (
+                <div
+                  key={index}
+                  style={{
+                    backgroundColor: '#4caf50',
+                    color: 'white',
+                    padding: '0.5rem 1rem',
+                    borderRadius: '20px',
+                    fontSize: '0.9rem',
+                    animation: 'slideIn 0.5s ease-out'
+                  }}
+                >
+                  🎓 Student ID: {face}
+                </div>
+              ))}
+            </div>
           </div>
         )}
       </div>

@@ -92,7 +92,7 @@ def create_sample_config():
             "mark_late_threshold_minutes": 15
         },
         "server": {
-            "node_server_url": "http://localhost:5000",
+            "node_server_url": "http://localhost:3001",
             "python_server_port": 5001
         }
     }

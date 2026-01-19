@@ -42,6 +42,8 @@ class Database {
         roll_number TEXT UNIQUE,
         class_id INTEGER,
         email TEXT,
+        password TEXT,
+        role TEXT DEFAULT 'student',
         created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
         FOREIGN KEY (class_id) REFERENCES classes (id)
       )`,
@@ -74,46 +76,43 @@ class Database {
     const classCount = await this.get('SELECT COUNT(*) as count FROM classes');
     if (classCount.count > 0) return;
 
-    // Insert sample classes
+    // Insert MCA class only
     const classes = [
-      ['Grade 10 A', '10', 'A'],
-      ['Grade 10 B', '10', 'B'],
-      ['Grade 11 A', '11', 'A'],
-      ['Grade 12 A', '12', 'A']
+      ['MCA', 'MCA', 'A']
     ];
 
     for (const [name, grade, section] of classes) {
       await this.run('INSERT INTO classes (name, grade, section) VALUES (?, ?, ?)', [name, grade, section]);
     }
 
-    // Insert sample subjects
+    // Insert MCA subjects
     const subjects = [
-      ['Mathematics', 'MATH'],
-      ['Physics', 'PHY'],
-      ['Chemistry', 'CHEM'],
-      ['Biology', 'BIO'],
-      ['English', 'ENG'],
-      ['History', 'HIST']
+      ['DBMS', 'DBMS'],
+      ['Maths', 'MATHS'],
+      ['Web Technology', 'WEBTEC'],
+      ['C Programming', 'CPROG'],
+      ['OS', 'OS'],
+      ['Web Laboratory', 'WEBLAB'],
+      ['DBMS Lab', 'DBMSLAB'],
+      ['C Lab', 'CLAB']
     ];
 
     for (const [name, code] of subjects) {
       await this.run('INSERT INTO subjects (name, code) VALUES (?, ?)', [name, code]);
     }
 
-    // Insert sample students
+    // Insert sample MCA students
     const students = [
-      ['John Doe', 'ST001', 1],
-      ['Jane Smith', 'ST002', 1],
-      ['Mike Johnson', 'ST003', 1],
-      ['Sarah Wilson', 'ST004', 1],
-      ['David Brown', 'ST005', 2],
-      ['Lisa Davis', 'ST006', 2],
-      ['Tom Miller', 'ST007', 2],
-      ['Emma Garcia', 'ST008', 2]
+      ['Ashritha', 'MCA001', 1, 'ashritha@MCA001', 'MCA001', 'student'],
+      ['Joycil', 'MCA004', 1, 'joycil@MCA004', 'MCA004', 'student'],
+      ['Bhavish', 'MCA002', 1, 'bhavish@MCA002', 'MCA002', 'student'],
+      ['Deepak', 'MCA003', 1, 'deepak@MCA003', 'MCA003', 'student'],
+      ['Admin User', 'ADMIN001', 1, 'admin@ADMIN001', 'ADMIN001', 'admin'],
+      ['Faculty User', 'FAC001', 1, 'faculty@FAC001', 'FAC001', 'faculty']
     ];
 
-    for (const [name, rollNumber, classId] of students) {
-      await this.run('INSERT INTO students (name, roll_number, class_id) VALUES (?, ?, ?)', [name, rollNumber, classId]);
+    for (const [name, rollNumber, classId, email, password, role] of students) {
+      await this.run('INSERT INTO students (name, roll_number, class_id, email, password, role) VALUES (?, ?, ?, ?, ?, ?)', [name, rollNumber, classId, email, password, role]);
     }
   }
 
@@ -193,7 +192,12 @@ class Database {
   }
 
   async getLiveAttendanceData() {
-    const today = new Date().toISOString().split('T')[0];
+    // Get the most recent date with attendance data, or today if no data yet
+    const latestDate = await this.get(`
+      SELECT COALESCE(MAX(date), DATE('now')) as date FROM attendance
+    `);
+    
+    const queryDate = latestDate?.date || new Date().toISOString().split('T')[0];
     
     const classWise = await this.all(`
       SELECT 
@@ -207,7 +211,7 @@ class Database {
       LEFT JOIN attendance a ON c.id = a.class_id AND a.date = ?
       GROUP BY c.id, c.name
       ORDER BY c.name
-    `, [today]);
+    `, [queryDate]);
 
     const subjectWise = await this.all(`
       SELECT 
@@ -216,14 +220,72 @@ class Database {
         COUNT(CASE WHEN a.status = 'present' THEN 1 END) as present,
         COUNT(CASE WHEN a.status = 'absent' THEN 1 END) as absent,
         COUNT(CASE WHEN a.status = 'late' THEN 1 END) as late,
-        COUNT(*) as total
+        COUNT(DISTINCT CASE WHEN a.student_id IS NOT NULL THEN a.student_id END) as total
       FROM subjects s
       LEFT JOIN attendance a ON s.id = a.subject_id AND a.date = ?
       GROUP BY s.id, s.name
       ORDER BY s.name
-    `, [today]);
+    `, [queryDate]);
 
-    return { classWise, subjectWise, date: today };
+    return { classWise, subjectWise, date: queryDate };
+  }
+
+  // Authentication methods
+  async login(email, password) {
+    try {
+      const user = await this.get('SELECT * FROM students WHERE email = ? AND password = ?', [email, password]);
+      return user;
+    } catch (error) {
+      throw new Error(`Login failed: ${error.message}`);
+    }
+  }
+
+  async getStudentById(studentId) {
+    try {
+      return await this.get('SELECT * FROM students WHERE id = ?', [studentId]);
+    } catch (error) {
+      throw new Error(`Failed to get student: ${error.message}`);
+    }
+  }
+
+  async getStudentAttendanceForDay(studentId, date) {
+    try {
+      return await this.all(`
+        SELECT 
+          a.id,
+          s.name as subject_name,
+          a.status,
+          a.date,
+          a.marked_at
+        FROM attendance a
+        JOIN subjects s ON a.subject_id = s.id
+        WHERE a.student_id = ? AND a.date = ?
+        ORDER BY s.name
+      `, [studentId, date]);
+    } catch (error) {
+      throw new Error(`Failed to get attendance: ${error.message}`);
+    }
+  }
+
+  async getStudentAttendanceHistory(studentId, days = 30) {
+    try {
+      const startDate = new Date();
+      startDate.setDate(startDate.getDate() - days);
+      const formattedStartDate = startDate.toISOString().split('T')[0];
+
+      return await this.all(`
+        SELECT 
+          a.date,
+          s.name as subject_name,
+          a.status
+        FROM attendance a
+        JOIN subjects s ON a.subject_id = s.id
+        WHERE a.student_id = ? AND a.date >= ?
+        ORDER BY a.date DESC, s.name
+      `, [studentId, formattedStartDate]);
+    } catch (error) {
+      throw new Error(`Failed to get attendance history: ${error.message}`);
+    }
   }
 }
 
